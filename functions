@@ -1,0 +1,53 @@
+# vim: set ft=sh
+
+set -e
+
+status()
+{
+	echo -e " \e[34;1m::\e[0;1m $1\e[0m"
+}
+
+add_exit_hook()
+{
+	array_unshift "exit_hooks" "$1"
+}
+
+do_exit_hooks()
+{
+	for (( i=0; i<${#exit_hooks[@]}; i++ )); do
+		eval "${exit_hooks[$i]}"
+	done
+	exit_hooks=()
+}
+
+exit_hooks=()
+
+var_export()
+{
+	count=`eval echo "\\${#$1[@]}"`
+	for (( i=0; i<$count; i++ ))
+	{
+		echo -n '"'
+		eval "echo -n \"\${${1}[$i]}\""
+		echo '"'
+	}
+}
+
+array_unshift()
+{
+	local arr="$1"
+	local newel="$2"
+	eval "$arr=(\"$newel\" `var_export $arr`)"
+}
+
+trap do_exit_hooks EXIT
+
+find_loop_dev()
+{
+	for f in /sys/devices/virtual/block/loop*/loop/backing_file; do
+		if test "`cat $f`" = "$1"; then
+			echo $f | cut -d/ -f6
+			break
+		fi
+	done
+}

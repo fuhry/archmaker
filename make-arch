@@ -1,0 +1,110 @@
+#!/bin/bash
+
+## ArchMaker - generate VirtualBox virtual machines with Arch on them.
+## Written by Dan Fuhry <dan@fuhry.com>
+## Public domain
+
+. functions
+
+if test "$EUID" -gt 0; then
+	sudo $0
+fi
+
+if test "$EUID" -eq 0; then
+status "Verifying that the loop module is loaded with the right parameters"
+if [ `cat /sys/module/loop/parameters/max_part` -lt 1 ]; then
+	status "Reloading the loop module with max_part=128"
+	modprobe -r loop
+	modprobe loop max_part=128
+fi
+
+if ! which pacstrap > /dev/null; then
+	status "Installing arch-install-scripts"
+	pacman -Sy arch-install-scripts
+fi
+
+if ! which VBoxManage > /dev/null; then
+	status "Installing VirtualBox"
+	pacman -Sy virtualbox
+fi
+
+if ! which gdisk > /dev/null; then
+	status "Installing gptfdisk (aka gdisk)"
+	pacman -Sy gptfdisk
+fi
+
+status "Creating image file and attaching loop device."
+[ -f "Arch.img" ] && rm -f Arch.img
+truncate -s 20G Arch.img
+losetup -f Arch.img
+
+archimg="`readlink -f Arch.img`"
+loopdev=`find_loop_dev "$archimg"`
+
+# unhook the loop device when we are finished
+unloop() {
+	losetup -d "/dev/$loopdev"
+}
+add_exit_hook unloop
+
+status "Partitioning virtual disk."
+cat <<EOF | gdisk /dev/$loopdev > /dev/null
+n
+1
+
++2M
+ef02
+n
+2
+
+
+8300
+w
+y
+
+EOF
+
+status "Formatting virtual disk."
+
+mkfs.ext4 -q -L arch_root -E lazy_itable_init /dev/${loopdev}p2
+
+if test -d ./stage && test "`ls -A stage`" != ""; then
+	echo 'The directory "./stage" exists and is not empty!'
+	exit 1
+fi
+
+test -d stage && rm -r stage
+
+mkdir stage
+mount -t ext4 /dev/${loopdev}p2 ./stage
+
+unmount()
+{
+	umount ./stage/dev || true
+	umount ./stage
+	rm -r stage
+}
+add_exit_hook unmount
+
+status "Installing the base system."
+pacstrap -c ./stage \
+	base \
+	grub-bios \
+	grml-zsh-config \
+	vim
+	
+status "Installing GRUB."
+arch-chroot ./stage sh -c 'grub-install --target i386-pc --modules="part_gpt ext2" /dev/'${loopdev}' &&
+					sed -re "s/quiet//" /etc/default/grub &&
+					grub-mkconfig -o /boot/grub/grub.cfg &&
+					usermod -s /bin/zsh root'
+
+cat <<EOF >> ./stage/etc/fstab
+LABEL=arch_root	/	ext4	defaults	1	1
+
+EOF
+
+exit 0
+fi
+
+exec ./stage2

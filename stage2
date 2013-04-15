@@ -1,0 +1,33 @@
+#!/bin/bash
+
+. functions
+
+status "Converting the image to VMDK format. This may take a minute."
+test -f Arch.vmdk && rm -f Arch.vmdk
+qemu-img convert -f raw -O vmdk -S 2M Arch.img Arch.vmdk
+rm -f Arch.img
+
+status "Creating VM."
+vm_uuid=`uuidgen`
+vm_os=ArchLinux
+test `uname -m` = "x86_64" && vm_os+="_64"
+
+if test -d ./ArchMaker; then
+	VBoxManage unregistervm ArchMaker --delete
+	rm -rf ArchMaker
+fi
+VBoxManage createvm --name ArchMaker --basefolder "`pwd`" --ostype $vm_os --uuid $vm_uuid --register
+VBoxManage storagectl $vm_uuid --name SATA --add sata
+VBoxManage storageattach $vm_uuid --storagectl SATA --port 0 --device 0 --type hdd --medium ./Arch.vmdk
+
+status "Exporting the VM as an OVA."
+test -f ArchMaker.ova && rm -f ArchMaker.ova
+VBoxManage export $vm_uuid -o ArchMaker.ova \
+	--vsys 0 \
+		--product "Arch Linux" \
+		--vendor "ArchMaker" \
+		--version "`date +%Y-%m-%d`"
+		
+VBoxManage unregistervm $vm_uuid --delete
+
+status "Complete!"
