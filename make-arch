@@ -95,7 +95,7 @@ pacstrap -c ./stage \
 	
 status "Installing GRUB."
 arch-chroot ./stage sh -c 'grub-install --target i386-pc --modules="part_gpt ext2" /dev/'${loopdev}' &&
-					sed -re "s/quiet//" /etc/default/grub &&
+					sed -re "s/quiet//" -i /etc/default/grub &&
 					grub-mkconfig -o /boot/grub/grub.cfg &&
 					usermod -s /bin/zsh root'
 
