@@ -12,7 +12,7 @@ fi
 
 if test "$EUID" -eq 0; then
 status "Verifying that the loop module is loaded with the right parameters"
-if [ `cat /sys/module/loop/parameters/max_part` -lt 1 ]; then
+if [ "`cat /sys/module/loop/parameters/max_part`" -lt 1 ]; then
 	status "Reloading the loop module with max_part=128"
 	modprobe -r loop
 	modprobe loop max_part=128
@@ -48,7 +48,7 @@ unloop() {
 add_exit_hook unloop
 
 status "Partitioning virtual disk."
-cat <<EOF | gdisk /dev/$loopdev > /dev/null
+cat <<EOF | gdisk /dev/$loopdev > /dev/null || true
 n
 1
 
@@ -94,6 +94,7 @@ pacstrap -c ./stage \
 	vim
 	
 status "Installing GRUB."
+echo "GRUB_DISABLE_SUBMENU=y" | arch-chroot ./stage tee /etc/default/grub
 arch-chroot ./stage sh -c 'grub-install --target i386-pc --modules="part_gpt ext2" /dev/'${loopdev}' &&
 					sed -re "s/quiet//" -i /etc/default/grub &&
 					grub-mkconfig -o /boot/grub/grub.cfg &&
